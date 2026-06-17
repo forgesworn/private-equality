@@ -67,5 +67,40 @@ export function verifyRepr(
   }
 }
 
+/** Proof of knowledge of x s.t. X1 = base1^x and X2 = base2^x (same x). */
+export interface EqualLogs { c: bigint; s: bigint }
+
+const DOM_EQ = new TextEncoder().encode('private-equality/eq-v1')
+
+function challengeEq(
+  base1: Pt, base2: Pt, X1: Pt, X2: Pt, t1: Pt, t2: Pt, bindingHash: Uint8Array, tag: number,
+): bigint {
+  return hashToScalar(
+    DOM_EQ, bindingHash, new Uint8Array([tag]),
+    encodePoint(base1), encodePoint(base2), encodePoint(X1), encodePoint(X2), encodePoint(t1), encodePoint(t2),
+  )
+}
+
+export function proveEqualLogs(
+  base1: Pt, base2: Pt, x: bigint, X1: Pt, X2: Pt, bindingHash: Uint8Array, tag: number,
+): EqualLogs {
+  const r = randomScalar()
+  const t1 = base1.multiply(r), t2 = base2.multiply(r)
+  const c = challengeEq(base1, base2, X1, X2, t1, t2, bindingHash, tag)
+  return { c, s: mod(r + c * x) }
+}
+
+export function verifyEqualLogs(
+  base1: Pt, base2: Pt, X1: Pt, X2: Pt, proof: EqualLogs, bindingHash: Uint8Array, tag: number,
+): boolean {
+  try {
+    const t1 = base1.multiply(proof.s).add(X1.multiply(proof.c).negate())
+    const t2 = base2.multiply(proof.s).add(X2.multiply(proof.c).negate())
+    return challengeEq(base1, base2, X1, X2, t1, t2, bindingHash, tag) === proof.c
+  } catch {
+    return false
+  }
+}
+
 // (Helpers re-exported for sibling proofs.)
 export { mod, encodeScalar, G }

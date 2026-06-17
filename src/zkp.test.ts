@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { G, randomScalar, mod } from './group.js'
-import { provePoK, verifyPoK, proveRepr, verifyRepr } from './zkp.js'
+import { provePoK, verifyPoK, proveRepr, verifyRepr, proveEqualLogs, verifyEqualLogs } from './zkp.js'
 
 const bh = new Uint8Array(32).fill(7) // a fixed bindingHash for tests
 
@@ -50,5 +50,22 @@ describe('zkp: representation proof', () => {
     const proof = proveRepr(bP, bQ1, bQ2, r, y, P, Q, bh, 5)
     const badQ = Q.add(bQ2) // off by one in y
     expect(verifyRepr(bP, bQ1, bQ2, P, badQ, proof, bh, 5)).toBe(false)
+  })
+})
+
+describe('zkp: equality of two discrete logs', () => {
+  it('verifies equal exponents across two bases', () => {
+    const base1 = G.multiply(randomScalar()), base2 = G.multiply(randomScalar())
+    const x = randomScalar()
+    const X1 = base1.multiply(x), X2 = base2.multiply(x)
+    const proof = proveEqualLogs(base1, base2, x, X1, X2, bh, 7)
+    expect(verifyEqualLogs(base1, base2, X1, X2, proof, bh, 7)).toBe(true)
+  })
+  it('rejects unequal exponents', () => {
+    const base1 = G.multiply(randomScalar()), base2 = G.multiply(randomScalar())
+    const x = randomScalar()
+    const X1 = base1.multiply(x), X2 = base2.multiply(mod(x + 1n))
+    const proof = proveEqualLogs(base1, base2, x, X1, X2, bh, 7)
+    expect(verifyEqualLogs(base1, base2, X1, X2, proof, bh, 7)).toBe(false)
   })
 })
