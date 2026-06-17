@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { G, randomScalar, mod } from './group.js'
-import { provePoK, verifyPoK } from './zkp.js'
+import { provePoK, verifyPoK, proveRepr, verifyRepr } from './zkp.js'
 
 const bh = new Uint8Array(32).fill(7) // a fixed bindingHash for tests
 
@@ -30,5 +30,25 @@ describe('zkp: proof of knowledge of discrete log', () => {
     const proof = provePoK(G, x, X, bh, 1)
     const otherBinding = new Uint8Array(32).fill(9)
     expect(verifyPoK(G, X, proof, otherBinding, 1)).toBe(false)
+  })
+})
+
+describe('zkp: representation proof', () => {
+  it('verifies a well-formed (P, Q)', () => {
+    const bP = G.multiply(randomScalar()), bQ1 = G.multiply(randomScalar()), bQ2 = G.multiply(randomScalar())
+    const r = randomScalar(), y = randomScalar()
+    const P = bP.multiply(r)
+    const Q = bQ1.multiply(r).add(bQ2.multiply(y))
+    const proof = proveRepr(bP, bQ1, bQ2, r, y, P, Q, bh, 5)
+    expect(verifyRepr(bP, bQ1, bQ2, P, Q, proof, bh, 5)).toBe(true)
+  })
+  it('rejects a forged Q', () => {
+    const bP = G.multiply(randomScalar()), bQ1 = G.multiply(randomScalar()), bQ2 = G.multiply(randomScalar())
+    const r = randomScalar(), y = randomScalar()
+    const P = bP.multiply(r)
+    const Q = bQ1.multiply(r).add(bQ2.multiply(y))
+    const proof = proveRepr(bP, bQ1, bQ2, r, y, P, Q, bh, 5)
+    const badQ = Q.add(bQ2) // off by one in y
+    expect(verifyRepr(bP, bQ1, bQ2, P, badQ, proof, bh, 5)).toBe(false)
   })
 })
