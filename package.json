@@ -1,0 +1,26 @@
+{
+  "name": "@forgesworn/private-equality",
+  "version": "0.0.0",
+  "description": "Private equality of a secret, revealing one bit — Socialist Millionaires' Protocol over Ristretto255.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
+  },
+  "keywords": ["smp", "socialist-millionaires", "private-equality", "zero-knowledge", "ristretto255", "psi", "nostr"],
+  "license": "MIT",
+  "dependencies": {
+    "@noble/curves": "^2.0.1",
+    "@noble/hashes": "^2.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0",
+    "@vitest/coverage-v8": "^2.0.0"
+  }
+}
