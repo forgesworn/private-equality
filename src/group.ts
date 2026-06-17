@@ -4,11 +4,18 @@ import { randomBytes } from '@noble/hashes/utils.js'
 
 const Point = ristretto255.Point
 
-/** A Ristretto255 group element. */
-export type Pt = InstanceType<typeof Point>
+/** A Ristretto255 group element — the subset of operations this library uses. */
+export interface Pt {
+  multiply(scalar: bigint): Pt
+  add(other: Pt): Pt
+  subtract(other: Pt): Pt
+  negate(): Pt
+  equals(other: Pt): boolean
+  toBytes(): Uint8Array
+}
 
 /** The fixed generator g1. */
-export const G: Pt = Point.BASE
+export const G: Pt = Point.BASE as unknown as Pt
 
 /** The prime order of the scalar field. */
 export const L: bigint = Point.Fn.ORDER
@@ -50,7 +57,7 @@ export function encodePoint(p: Pt): Uint8Array {
 
 /** Decode a 32-byte point; throws on a non-canonical / invalid encoding. */
 export function decodePoint(bytes: Uint8Array): Pt {
-  return Point.fromBytes(bytes)
+  return Point.fromBytes(bytes) as unknown as Pt
 }
 
 /** Encode a scalar to a fixed 32-byte little-endian form. */
