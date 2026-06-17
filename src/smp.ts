@@ -1,6 +1,9 @@
-import { encodePoint, decodePoint, encodeScalar, decodeScalar, type Pt } from './group.js'
+import { encodePoint, decodePoint, encodeScalar, decodeScalar, G, randomScalar, hashToScalar, type Pt } from './group.js'
 import type { PoK, Repr, EqualLogs } from './zkp.js'
+import { provePoK, verifyPoK, proveRepr, verifyRepr, proveEqualLogs, verifyEqualLogs } from './zkp.js'
 import { SmpError } from './types.js'
+import type { Secret, SmpSession, SmpStep } from './types.js'
+import { sha256 } from '@noble/hashes/sha2.js'
 
 // --- fixed-layout buffer writer/reader ---
 class Writer {
@@ -79,4 +82,110 @@ export function decodeMsg4(b: Uint8Array): Msg4 {
   const Rb = r.point()
   const eqRb = { c: r.scalar(), s: r.scalar() }
   return { Rb, eqRb }
+}
+
+const DOM_SECRET = new TextEncoder().encode('private-equality/secret-v1')
+
+function secretToScalar(secret: Secret): bigint {
+  const bytes = typeof secret === 'string' ? new TextEncoder().encode(secret) : secret
+  return hashToScalar(DOM_SECRET, bytes)
+}
+function toBindingHash(sessionBinding: Uint8Array): Uint8Array {
+  return sha256(sessionBinding) // fixed 32 bytes for unambiguous transcripts
+}
+
+/** Begin as the initiator (secret x). Returns the session and the first message to send. */
+export function initiate(secret: Secret, sessionBinding: Uint8Array): { session: SmpSession; first: Uint8Array } {
+  const x = secretToScalar(secret)
+  const bh = toBindingHash(sessionBinding)
+  const a2 = randomScalar(), a3 = randomScalar()
+  const g2a = G.multiply(a2), g3a = G.multiply(a3)
+  const first = encodeMsg1({ g2a, g3a, pok2: provePoK(G, a2, g2a, bh, 1), pok3: provePoK(G, a3, g3a, bh, 2) })
+
+  let g3b!: Pt, Pa!: Pt, Pb!: Pt, QaQb!: Pt
+  let state: 'await2' | 'await4' | 'done' = 'await2'
+
+  const session: SmpSession = {
+    next(incoming: Uint8Array): SmpStep {
+      if (state === 'await2') {
+        const m = decodeMsg2(incoming)
+        if (!verifyPoK(G, m.g2b, m.pokB2, bh, 3)) throw new SmpError('bad g2b proof')
+        if (!verifyPoK(G, m.g3b, m.pokB3, bh, 4)) throw new SmpError('bad g3b proof')
+        g3b = m.g3b
+        const g2 = m.g2b.multiply(a2)
+        const g3 = m.g3b.multiply(a3)
+        if (!verifyRepr(g3, G, g2, m.Pb, m.Qb, m.reprB, bh, 5)) throw new SmpError('bad Pb/Qb proof')
+        Pb = m.Pb
+        const s = randomScalar()
+        Pa = g3.multiply(s)
+        const Qa = G.multiply(s).add(g2.multiply(x))
+        const reprA = proveRepr(g3, G, g2, s, x, Pa, Qa, bh, 6)
+        QaQb = Qa.add(m.Qb.negate())
+        const Ra = QaQb.multiply(a3)
+        const eqRa = proveEqualLogs(G, QaQb, a3, g3a, Ra, bh, 7)
+        state = 'await4'
+        return { send: encodeMsg3({ Pa, Qa, Ra, reprA, eqRa }) }
+      }
+      if (state === 'await4') {
+        const m = decodeMsg4(incoming)
+        if (!verifyEqualLogs(G, QaQb, g3b, m.Rb, m.eqRb, bh, 8)) throw new SmpError('bad Rb proof')
+        const Rab = m.Rb.multiply(a3)
+        const match = Rab.equals(Pa.add(Pb.negate()))
+        state = 'done'
+        return { done: true, result: { match } }
+      }
+      throw new SmpError('protocol already complete')
+    },
+  }
+  return { session, first }
+}
+
+/** Begin as the responder (secret y). No message until the first incoming one. */
+export function respond(secret: Secret, sessionBinding: Uint8Array): { session: SmpSession } {
+  const y = secretToScalar(secret)
+  const bh = toBindingHash(sessionBinding)
+  const b2 = randomScalar(), b3 = randomScalar()
+
+  let g3a!: Pt, g3b!: Pt, g2!: Pt, g3!: Pt, Pb!: Pt, Qb!: Pt
+  let state: 'await1' | 'await3' | 'done' = 'await1'
+
+  const session: SmpSession = {
+    next(incoming: Uint8Array): SmpStep {
+      if (state === 'await1') {
+        const m = decodeMsg1(incoming)
+        if (!verifyPoK(G, m.g2a, m.pok2, bh, 1)) throw new SmpError('bad g2a proof')
+        if (!verifyPoK(G, m.g3a, m.pok3, bh, 2)) throw new SmpError('bad g3a proof')
+        g3a = m.g3a
+        const g2b = G.multiply(b2)
+        g3b = G.multiply(b3)
+        g2 = m.g2a.multiply(b2)
+        g3 = m.g3a.multiply(b3)
+        const r = randomScalar()
+        Pb = g3.multiply(r)
+        Qb = G.multiply(r).add(g2.multiply(y))
+        const reprB = proveRepr(g3, G, g2, r, y, Pb, Qb, bh, 5)
+        state = 'await3'
+        return { send: encodeMsg2({
+          g2b, g3b, Pb, Qb,
+          pokB2: provePoK(G, b2, g2b, bh, 3),
+          pokB3: provePoK(G, b3, g3b, bh, 4),
+          reprB,
+        }) }
+      }
+      if (state === 'await3') {
+        const m = decodeMsg3(incoming)
+        if (!verifyRepr(g3, G, g2, m.Pa, m.Qa, m.reprA, bh, 6)) throw new SmpError('bad Pa/Qa proof')
+        const QaQb = m.Qa.add(Qb.negate())
+        if (!verifyEqualLogs(G, QaQb, g3a, m.Ra, m.eqRa, bh, 7)) throw new SmpError('bad Ra proof')
+        const Rb = QaQb.multiply(b3)
+        const eqRb = proveEqualLogs(G, QaQb, b3, g3b, Rb, bh, 8)
+        const Rab = m.Ra.multiply(b3)
+        const match = Rab.equals(m.Pa.add(Pb.negate()))
+        state = 'done'
+        return { send: encodeMsg4({ Rb, eqRb }), done: true, result: { match } }
+      }
+      throw new SmpError('protocol already complete')
+    },
+  }
+  return { session }
 }
