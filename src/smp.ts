@@ -107,34 +107,39 @@ export function initiate(secret: Secret, sessionBinding: Uint8Array): { session:
 
   const session: SmpSession = {
     next(incoming: Uint8Array): SmpStep {
-      if (state === 'await2') {
-        const m = decodeMsg2(incoming)
-        if (!verifyPoK(G, m.g2b, m.pokB2, bh, 3)) throw new SmpError('bad g2b proof')
-        if (!verifyPoK(G, m.g3b, m.pokB3, bh, 4)) throw new SmpError('bad g3b proof')
-        g3b = m.g3b
-        const g2 = m.g2b.multiply(a2)
-        const g3 = m.g3b.multiply(a3)
-        if (!verifyRepr(g3, G, g2, m.Pb, m.Qb, m.reprB, bh, 5)) throw new SmpError('bad Pb/Qb proof')
-        Pb = m.Pb
-        const s = randomScalar()
-        Pa = g3.multiply(s)
-        const Qa = G.multiply(s).add(g2.multiply(x))
-        const reprA = proveRepr(g3, G, g2, s, x, Pa, Qa, bh, 6)
-        QaQb = Qa.add(m.Qb.negate())
-        const Ra = QaQb.multiply(a3)
-        const eqRa = proveEqualLogs(G, QaQb, a3, g3a, Ra, bh, 7)
-        state = 'await4'
-        return { send: encodeMsg3({ Pa, Qa, Ra, reprA, eqRa }) }
+      try {
+        if (state === 'await2') {
+          const m = decodeMsg2(incoming)
+          if (!verifyPoK(G, m.g2b, m.pokB2, bh, 3)) throw new SmpError('bad g2b proof')
+          if (!verifyPoK(G, m.g3b, m.pokB3, bh, 4)) throw new SmpError('bad g3b proof')
+          g3b = m.g3b
+          const g2 = m.g2b.multiply(a2)
+          const g3 = m.g3b.multiply(a3)
+          if (!verifyRepr(g3, G, g2, m.Pb, m.Qb, m.reprB, bh, 5)) throw new SmpError('bad Pb/Qb proof')
+          Pb = m.Pb
+          const s = randomScalar()
+          Pa = g3.multiply(s)
+          const Qa = G.multiply(s).add(g2.multiply(x))
+          const reprA = proveRepr(g3, G, g2, s, x, Pa, Qa, bh, 6)
+          QaQb = Qa.add(m.Qb.negate())
+          const Ra = QaQb.multiply(a3)
+          const eqRa = proveEqualLogs(G, QaQb, a3, g3a, Ra, bh, 7)
+          state = 'await4'
+          return { send: encodeMsg3({ Pa, Qa, Ra, reprA, eqRa }) }
+        }
+        if (state === 'await4') {
+          const m = decodeMsg4(incoming)
+          if (!verifyEqualLogs(G, QaQb, g3b, m.Rb, m.eqRb, bh, 8)) throw new SmpError('bad Rb proof')
+          const Rab = m.Rb.multiply(a3)
+          const match = Rab.equals(Pa.add(Pb.negate()))
+          state = 'done'
+          return { done: true, result: { match } }
+        }
+        throw new SmpError('protocol already complete')
+      } catch (e) {
+        if (e instanceof SmpError) throw e
+        throw new SmpError('malformed message')
       }
-      if (state === 'await4') {
-        const m = decodeMsg4(incoming)
-        if (!verifyEqualLogs(G, QaQb, g3b, m.Rb, m.eqRb, bh, 8)) throw new SmpError('bad Rb proof')
-        const Rab = m.Rb.multiply(a3)
-        const match = Rab.equals(Pa.add(Pb.negate()))
-        state = 'done'
-        return { done: true, result: { match } }
-      }
-      throw new SmpError('protocol already complete')
     },
   }
   return { session, first }
@@ -151,40 +156,45 @@ export function respond(secret: Secret, sessionBinding: Uint8Array): { session: 
 
   const session: SmpSession = {
     next(incoming: Uint8Array): SmpStep {
-      if (state === 'await1') {
-        const m = decodeMsg1(incoming)
-        if (!verifyPoK(G, m.g2a, m.pok2, bh, 1)) throw new SmpError('bad g2a proof')
-        if (!verifyPoK(G, m.g3a, m.pok3, bh, 2)) throw new SmpError('bad g3a proof')
-        g3a = m.g3a
-        const g2b = G.multiply(b2)
-        g3b = G.multiply(b3)
-        g2 = m.g2a.multiply(b2)
-        g3 = m.g3a.multiply(b3)
-        const r = randomScalar()
-        Pb = g3.multiply(r)
-        Qb = G.multiply(r).add(g2.multiply(y))
-        const reprB = proveRepr(g3, G, g2, r, y, Pb, Qb, bh, 5)
-        state = 'await3'
-        return { send: encodeMsg2({
-          g2b, g3b, Pb, Qb,
-          pokB2: provePoK(G, b2, g2b, bh, 3),
-          pokB3: provePoK(G, b3, g3b, bh, 4),
-          reprB,
-        }) }
+      try {
+        if (state === 'await1') {
+          const m = decodeMsg1(incoming)
+          if (!verifyPoK(G, m.g2a, m.pok2, bh, 1)) throw new SmpError('bad g2a proof')
+          if (!verifyPoK(G, m.g3a, m.pok3, bh, 2)) throw new SmpError('bad g3a proof')
+          g3a = m.g3a
+          const g2b = G.multiply(b2)
+          g3b = G.multiply(b3)
+          g2 = m.g2a.multiply(b2)
+          g3 = m.g3a.multiply(b3)
+          const r = randomScalar()
+          Pb = g3.multiply(r)
+          Qb = G.multiply(r).add(g2.multiply(y))
+          const reprB = proveRepr(g3, G, g2, r, y, Pb, Qb, bh, 5)
+          state = 'await3'
+          return { send: encodeMsg2({
+            g2b, g3b, Pb, Qb,
+            pokB2: provePoK(G, b2, g2b, bh, 3),
+            pokB3: provePoK(G, b3, g3b, bh, 4),
+            reprB,
+          }) }
+        }
+        if (state === 'await3') {
+          const m = decodeMsg3(incoming)
+          if (!verifyRepr(g3, G, g2, m.Pa, m.Qa, m.reprA, bh, 6)) throw new SmpError('bad Pa/Qa proof')
+          const QaQb = m.Qa.add(Qb.negate())
+          if (!verifyEqualLogs(G, QaQb, g3a, m.Ra, m.eqRa, bh, 7)) throw new SmpError('bad Ra proof')
+          const Rb = QaQb.multiply(b3)
+          const eqRb = proveEqualLogs(G, QaQb, b3, g3b, Rb, bh, 8)
+          const Rab = m.Ra.multiply(b3)
+          const match = Rab.equals(m.Pa.add(Pb.negate()))
+          state = 'done'
+          return { send: encodeMsg4({ Rb, eqRb }), done: true, result: { match } }
+        }
+        throw new SmpError('protocol already complete')
+      } catch (e) {
+        if (e instanceof SmpError) throw e
+        throw new SmpError('malformed message')
       }
-      if (state === 'await3') {
-        const m = decodeMsg3(incoming)
-        if (!verifyRepr(g3, G, g2, m.Pa, m.Qa, m.reprA, bh, 6)) throw new SmpError('bad Pa/Qa proof')
-        const QaQb = m.Qa.add(Qb.negate())
-        if (!verifyEqualLogs(G, QaQb, g3a, m.Ra, m.eqRa, bh, 7)) throw new SmpError('bad Ra proof')
-        const Rb = QaQb.multiply(b3)
-        const eqRb = proveEqualLogs(G, QaQb, b3, g3b, Rb, bh, 8)
-        const Rab = m.Ra.multiply(b3)
-        const match = Rab.equals(m.Pa.add(Pb.negate()))
-        state = 'done'
-        return { send: encodeMsg4({ Rb, eqRb }), done: true, result: { match } }
-      }
-      throw new SmpError('protocol already complete')
     },
   }
   return { session }

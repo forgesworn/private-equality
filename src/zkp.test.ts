@@ -69,3 +69,23 @@ describe('zkp: equality of two discrete logs', () => {
     expect(verifyEqualLogs(base1, base2, X1, X2, proof, bh, 7)).toBe(false)
   })
 })
+
+describe('zkp: catch-branch coverage — zero scalars cause internal throws', () => {
+  it('verifyPoK returns false when proof scalars are zero (causes multiply(0n) throw)', () => {
+    const x = randomScalar()
+    const X = G.multiply(x)
+    expect(verifyPoK(G, X, { c: 0n, s: 0n }, bh, 1)).toBe(false)
+  })
+  it('verifyRepr returns false when proof scalars are zero', () => {
+    const bP = G.multiply(randomScalar()), bQ1 = G.multiply(randomScalar()), bQ2 = G.multiply(randomScalar())
+    const r = randomScalar(), y = randomScalar()
+    const P = bP.multiply(r), Q = bQ1.multiply(r).add(bQ2.multiply(y))
+    expect(verifyRepr(bP, bQ1, bQ2, P, Q, { c: 0n, sr: 0n, sy: 0n }, bh, 5)).toBe(false)
+  })
+  it('verifyEqualLogs returns false when proof scalars are zero', () => {
+    const base1 = G.multiply(randomScalar()), base2 = G.multiply(randomScalar())
+    const x = randomScalar()
+    const X1 = base1.multiply(x), X2 = base2.multiply(x)
+    expect(verifyEqualLogs(base1, base2, X1, X2, { c: 0n, s: 0n }, bh, 7)).toBe(false)
+  })
+})
