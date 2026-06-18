@@ -1,4 +1,4 @@
-export const PRIVATE_EQUALITY_VERSION = '0.0.0'
+export const PRIVATE_EQUALITY_VERSION = '0.1.0'
 
 /** The secret to compare. Hashed to a scalar internally; equal secrets → match. */
 export type Secret = Uint8Array | string
