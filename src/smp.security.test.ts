@@ -62,4 +62,12 @@ describe('smp security', () => {
     const badMsg2 = new Uint8Array(352).fill(0xff) // all-0xff is not a valid encoded point
     expect(() => A.session.next(badMsg2)).toThrow(SmpError)
   })
+
+  it('rejects an identity point on the wire (SmpError)', () => {
+    const A = initiate('secret', enc('chan'))
+    const B = respond('secret', enc('chan'))
+    const m = A.first.slice()
+    m.fill(0, 0, 32) // 32 zero bytes = the ristretto identity, in the g2a slot
+    expect(() => B.session.next(m)).toThrow(SmpError)
+  })
 })

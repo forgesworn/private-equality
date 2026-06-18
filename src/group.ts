@@ -12,6 +12,7 @@ export interface Pt {
   negate(): Pt
   equals(other: Pt): boolean
   toBytes(): Uint8Array
+  is0(): boolean
 }
 
 /** The fixed generator g1. */

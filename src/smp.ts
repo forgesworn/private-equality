@@ -32,6 +32,11 @@ export interface Msg2 { g2b: Pt; g3b: Pt; Pb: Pt; Qb: Pt; pokB2: PoK; pokB3: PoK
 export interface Msg3 { Pa: Pt; Qa: Pt; Ra: Pt; reprA: Repr; eqRa: EqualLogs }
 export interface Msg4 { Rb: Pt; eqRb: EqualLogs }
 
+function nonIdentity(p: Pt): Pt {
+  if (p.is0()) throw new SmpError('identity point rejected')
+  return p
+}
+
 // msg1: g2a, g3a, pok2{c,s}, pok3{c,s} → 2 points + 4 scalars = 192 B
 export function encodeMsg1(m: Msg1): Uint8Array {
   return new Writer().point(m.g2a).point(m.g3a)
@@ -39,7 +44,7 @@ export function encodeMsg1(m: Msg1): Uint8Array {
 }
 export function decodeMsg1(b: Uint8Array): Msg1 {
   const r = new Reader(b, 192)
-  const g2a = r.point(), g3a = r.point()
+  const g2a = nonIdentity(r.point()), g3a = nonIdentity(r.point())
   const pok2 = { c: r.scalar(), s: r.scalar() }, pok3 = { c: r.scalar(), s: r.scalar() }
   return { g2a, g3a, pok2, pok3 }
 }
@@ -52,7 +57,7 @@ export function encodeMsg2(m: Msg2): Uint8Array {
 }
 export function decodeMsg2(b: Uint8Array): Msg2 {
   const r = new Reader(b, 352)
-  const g2b = r.point(), g3b = r.point(), Pb = r.point(), Qb = r.point()
+  const g2b = nonIdentity(r.point()), g3b = nonIdentity(r.point()), Pb = nonIdentity(r.point()), Qb = nonIdentity(r.point())
   const pokB2 = { c: r.scalar(), s: r.scalar() }
   const pokB3 = { c: r.scalar(), s: r.scalar() }
   const reprB = { c: r.scalar(), sr: r.scalar(), sy: r.scalar() }
@@ -67,7 +72,7 @@ export function encodeMsg3(m: Msg3): Uint8Array {
 }
 export function decodeMsg3(b: Uint8Array): Msg3 {
   const r = new Reader(b, 256)
-  const Pa = r.point(), Qa = r.point(), Ra = r.point()
+  const Pa = nonIdentity(r.point()), Qa = nonIdentity(r.point()), Ra = nonIdentity(r.point())
   const reprA = { c: r.scalar(), sr: r.scalar(), sy: r.scalar() }
   const eqRa = { c: r.scalar(), s: r.scalar() }
   return { Pa, Qa, Ra, reprA, eqRa }
@@ -79,7 +84,7 @@ export function encodeMsg4(m: Msg4): Uint8Array {
 }
 export function decodeMsg4(b: Uint8Array): Msg4 {
   const r = new Reader(b, 96)
-  const Rb = r.point()
+  const Rb = nonIdentity(r.point())
   const eqRb = { c: r.scalar(), s: r.scalar() }
   return { Rb, eqRb }
 }
@@ -88,7 +93,8 @@ const DOM_SECRET = new TextEncoder().encode('private-equality/secret-v1')
 
 function secretToScalar(secret: Secret): bigint {
   const bytes = typeof secret === 'string' ? new TextEncoder().encode(secret) : secret
-  return hashToScalar(DOM_SECRET, bytes)
+  const s = hashToScalar(DOM_SECRET, bytes)
+  return s === 0n ? 1n : s
 }
 function toBindingHash(sessionBinding: Uint8Array): Uint8Array {
   return sha256(sessionBinding) // fixed 32 bytes for unambiguous transcripts
