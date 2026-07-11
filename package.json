@@ -17,7 +17,9 @@
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "smp",
@@ -28,7 +30,12 @@
     "psi",
     "nostr"
   ],
+  "author": "Darren",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/forgesworn/private-equality.git"
+  },
   "dependencies": {
     "@noble/curves": "^2.0.1",
     "@noble/hashes": "^2.0.1"
@@ -37,5 +44,12 @@
     "typescript": "^5.5.0",
     "vitest": "^2.0.0",
     "@vitest/coverage-v8": "^2.0.0"
+  },
+  "publishConfig": {
+    "provenance": true
+  },
+  "funding": {
+    "type": "lightning",
+    "url": "lightning:profusemeat89@walletofsatoshi.com"
   }
 }
