@@ -1,5 +1,11 @@
 # @forgesworn/private-equality
 
+**Nostr:** [`npub1mgvlrnf5hm9yf0n5mf9nqmvarhvxkc6remu5ec3vf8r0txqkuk7su0e7q2`](https://njump.me/npub1mgvlrnf5hm9yf0n5mf9nqmvarhvxkc6remu5ec3vf8r0txqkuk7su0e7q2)
+
+[![npm](https://img.shields.io/npm/v/@forgesworn/private-equality)](https://www.npmjs.com/package/@forgesworn/private-equality)
+[![CI](https://github.com/forgesworn/private-equality/actions/workflows/ci.yml/badge.svg)](https://github.com/forgesworn/private-equality/actions/workflows/ci.yml)
+[![GitHub Sponsors](https://img.shields.io/github/sponsors/TheCryptoDonkey?logo=githubsponsors&color=ea4aaa&label=Sponsor)](https://github.com/sponsors/TheCryptoDonkey)
+
 Decide *"do two parties hold the same secret — yes/no?"* via the Socialist Millionaires' Protocol over Ristretto255, revealing nothing else on mismatch.
 
 ## What it is
@@ -9,6 +15,18 @@ Decide *"do two parties hold the same secret — yes/no?"* via the Socialist Mil
 **When to use it:** any time two parties need to establish "do we share the same value?" without disclosing what the value is. Equal secrets yield `match: true`; unequal secrets yield `match: false` with nothing about either secret leaking. This is a general-purpose primitive — the consumer is responsible for deriving the secret and providing the authenticated channel.
 
 This implements the published SMP as specified in the OTR protocol, adapted for the Ristretto255 prime-order group. It is a standard construction, not a novel one.
+
+## Use cases
+
+- **Codeword matching** — two parties confirm they were given the same codeword
+  without either side revealing theirs
+- **Buddy verification** — OTR-style contact verification: confirm both ends of
+  an encrypted channel share the same out-of-band secret, defeating an
+  impersonator who doesn't know it
+- **Answer checking** — confirm a counterparty knows the same answer, PIN, or
+  passphrase without ever transmitting it
+- **Deduplication without disclosure** — check whether two parties hold the same
+  credential or token, learning only yes/no
 
 ## Install
 
