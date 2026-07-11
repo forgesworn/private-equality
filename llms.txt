@@ -1,0 +1,51 @@
+# @forgesworn/private-equality
+
+> Decide "do two parties hold the same secret — yes/no?" via the Socialist Millionaires' Protocol (OTR variant) over Ristretto255, revealing nothing else on mismatch.
+
+## Getting Started
+
+Install from npm:
+
+```bash
+npm install @forgesworn/private-equality
+```
+
+The library is ESM-only with a single entry point:
+
+```typescript
+import { initiate, respond, SmpError } from '@forgesworn/private-equality'
+```
+
+It is a pure state machine — no transport. You ferry opaque `Uint8Array`
+messages over YOUR authenticated channel (e.g. Noise), and you MUST supply a
+`sessionBinding` — that channel's transcript hash — identically on both sides.
+
+## Core flow (four messages)
+
+```typescript
+const binding = /* your authenticated channel's transcript hash */
+const alice = initiate(secret, binding)   // { session, first }
+const bob = respond(secret, binding)      // { session }
+
+const s1 = bob.session.next(alice.first)  // { send }
+const s2 = alice.session.next(s1.send!)   // { send }
+const s3 = bob.session.next(s2.send!)     // { send, done: true, result }
+const s4 = alice.session.next(s3.send!)   // { done: true, result }
+// s3.result.match === s4.result.match — the single revealed bit
+```
+
+## API
+
+- `initiate(secret: Uint8Array | string, sessionBinding: Uint8Array)` → `{ session: SmpSession; first: Uint8Array }`
+- `respond(secret: Uint8Array | string, sessionBinding: Uint8Array)` → `{ session: SmpSession }`
+- `SmpSession.next(incoming: Uint8Array)` → `{ send: Uint8Array }` or `{ send?: Uint8Array; done: true; result: { match: boolean } }`
+- `SmpError` — thrown on invalid proof, malformed message, wrong-state call, or binding mismatch
+- `PRIVATE_EQUALITY_VERSION` — library version string
+
+## Security notes
+
+- On mismatch, neither side learns anything beyond "not equal".
+- Requires an authenticated channel; the binding defeats cross-channel relays.
+- Standard published construction (OTR SMP); NOT third-party audited — no
+  production privacy claims until audited.
+- DDH-based (Ristretto255) — not post-quantum.

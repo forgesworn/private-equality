@@ -1,0 +1,98 @@
+# @forgesworn/private-equality
+
+> Decide "do two parties hold the same secret — yes/no?" via the Socialist Millionaires' Protocol (OTR variant) over Ristretto255, revealing nothing else on mismatch.
+
+## Getting Started
+
+Install from npm:
+
+```bash
+npm install @forgesworn/private-equality
+```
+
+The library is ESM-only with a single entry point:
+
+```typescript
+import { initiate, respond, SmpError } from '@forgesworn/private-equality'
+```
+
+It is a pure state machine — no transport. You ferry opaque `Uint8Array`
+messages over YOUR authenticated channel (e.g. Noise), and you MUST supply a
+`sessionBinding` — that channel's transcript hash — identically on both sides.
+
+## Core flow (four messages)
+
+```typescript
+const binding = /* your authenticated channel's transcript hash */
+const alice = initiate(secret, binding)   // { session, first }
+const bob = respond(secret, binding)      // { session }
+
+const s1 = bob.session.next(alice.first)  // { send }
+const s2 = alice.session.next(s1.send!)   // { send }
+const s3 = bob.session.next(s2.send!)     // { send, done: true, result }
+const s4 = alice.session.next(s3.send!)   // { done: true, result }
+// s3.result.match === s4.result.match — the single revealed bit
+```
+
+## API
+
+- `initiate(secret: Uint8Array | string, sessionBinding: Uint8Array)` → `{ session: SmpSession; first: Uint8Array }`
+- `respond(secret: Uint8Array | string, sessionBinding: Uint8Array)` → `{ session: SmpSession }`
+- `SmpSession.next(incoming: Uint8Array)` → `{ send: Uint8Array }` or `{ send?: Uint8Array; done: true; result: { match: boolean } }`
+- `SmpError` — thrown on invalid proof, malformed message, wrong-state call, or binding mismatch
+- `PRIVATE_EQUALITY_VERSION` — library version string
+
+## Security notes
+
+- On mismatch, neither side learns anything beyond "not equal".
+- Requires an authenticated channel; the binding defeats cross-channel relays.
+- Standard published construction (OTR SMP); NOT third-party audited — no
+  production privacy claims until audited.
+- DDH-based (Ristretto255) — not post-quantum.
+
+## Types
+
+```typescript
+type Secret = Uint8Array | string          // hashed to a scalar internally
+interface SmpResult { match: boolean }     // the one revealed bit
+type SmpStep =
+  | { send: Uint8Array; done?: false }                    // intermediate
+  | { send?: Uint8Array; done: true; result: SmpResult }  // terminal
+interface SmpSession { next(incoming: Uint8Array): SmpStep }
+class SmpError extends Error {}
+```
+
+## Protocol detail
+
+The OTR variant of the Socialist Millionaires' Protocol, ported to the
+Ristretto255 prime-order group. Four fixed-layout messages; every message
+carries sigma proofs (proof-of-knowledge of a discrete log, a representation
+proof, and equality-of-two-discrete-logs) verified before the state machine
+advances. All Fiat–Shamir challenges are domain-separated
+(`private-equality/pok-v1`, `.../repr-v1`, `.../eq-v1`, `.../secret-v1` for
+secret derivation) with a per-proof tag byte, and fold in the `sessionBinding`.
+
+Wire format: fixed-layout concatenation of 32-byte Ristretto255 point and
+scalar encodings with strict length checks. Identity points are rejected on
+decode. Message sizes are deterministic per step.
+
+## Error handling
+
+All failures throw `SmpError`: invalid or transplanted proofs, malformed or
+wrong-length messages, out-of-order `next()` calls, and mismatched
+`sessionBinding` values (the MITM case). Treat any `SmpError` as a protocol
+abort — do not retry within the same session; start a fresh one.
+
+## What the consumer must provide
+
+1. **The secret derivation** — a canonical byte encoding of the value being
+   compared (the library hashes it to a scalar with a domain-separated hash).
+2. **An authenticated channel** — e.g. a Noise session; the library never
+   opens sockets.
+3. **The `sessionBinding`** — the channel's transcript hash, identical on both
+   sides. Mismatch aborts by design.
+
+## Dependencies
+
+`@noble/curves` (ristretto255) and `@noble/hashes` only. `@noble/curves` is
+isolated behind `src/group.ts`.
